@@ -38,7 +38,7 @@ class OffboardNode(Node):
         self.offboard_pub = self.create_publisher(
             VehicleCommand,
             "/fmu/in/vehicle_command",
-            qos
+            qos 
         )
 
         self.offboard_timer = self.create_timer(1.0, self.offboard)
@@ -73,9 +73,8 @@ class OffboardNode(Node):
 
         setpoint = TrajectorySetpoint()
 
-        setpoint.position = [0.0, 0.0, -10.0]
 
-        setpoint.yaw = 0.0
+        setpoint.position = [50.0, 50.0, -10.0]
 
         setpoint.timestamp = (
             self.get_clock()
@@ -87,7 +86,7 @@ class OffboardNode(Node):
         self.setpoint_pub.publish(setpoint)
 
     def altitude(self, msg):
-        self.get_logger().info(f"Altitude: {(msg.x * -1):.2f}")
+        self.get_logger().info(f"Altitude: {(msg.z * -1):.2f}")
 
     def arm(self):
         msg = VehicleCommand()

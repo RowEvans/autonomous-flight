@@ -24,9 +24,6 @@ setup(
     },
     entry_points={
         'console_scripts': [
-            'publisher = cessna_offboard.publishing_node:main',
-            'listener = cessna_offboard.listener_node:main',
-            'px4 = cessna_offboard.px4_listener:main',
             'offboard = cessna_offboard.offboard_node:main',
         ],
     },

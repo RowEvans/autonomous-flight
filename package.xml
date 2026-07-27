@@ -4,7 +4,7 @@
   <name>cessna_offboard</name>
   <version>0.0.0</version>
   <description>TODO: Package description</description>
-  <maintainer email="rowan@todo.todo">rowan</maintainer>
+  <maintainer email="raevans2009@gmail.com">rowan</maintainer>
   <license>TODO: License declaration</license>
 
   <test_depend>ament_copyright</test_depend>

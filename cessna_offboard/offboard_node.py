@@ -1,7 +1,10 @@
 import rclpy
+import numpy as np
 from rclpy.node import Node
-from rclpy.qos import *
-from px4_msgs.msg import *
+from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSDurabilityPolicy, QoSHistoryPolicy
+
+from px4_msgs.msg import OffboardControlMode, TrajectorySetpoint, VehicleCommand, VehicleStatus
+
 
 class OffboardNode(Node):
 
@@ -9,118 +12,117 @@ class OffboardNode(Node):
 
         super().__init__("offboard_node")
 
-        qos = QoSProfile(
-            reliability=ReliabilityPolicy.BEST_EFFORT,
-            history=HistoryPolicy.KEEP_LAST,
-            depth=10
+        # quality of service profile for publishers
+        qos_pub = QoSProfile(
+            reliability = QoSReliabilityPolicy.BEST_EFFORT, # ensures publishers are being sent
+            durability = QoSDurabilityPolicy.TRANSIENT_LOCAL, # persists samples for 'late' subscriptions
+            history=QoSHistoryPolicy.KEEP_LAST, # only store up to n samples, n = depth
+            depth = 0 # queue size -> only if KEEP_LAST
         )
 
-        self.publisher= self.create_publisher(
-            OffboardControlMode,
-            "/fmu/in/offboard_control_mode",
-            qos
+        qos_sub = QoSProfile(
+            reliability = QoSReliabilityPolicy.BEST_EFFORT,
+            durability = QoSDurabilityPolicy.VOLATILE, # makes no attempt to persist
+            history=QoSHistoryPolicy.KEEP_LAST,
+            depth = 2
         )
 
-        self.setpoint_pub = self.create_publisher(
-            TrajectorySetpoint,
-            "/fmu/in/trajectory_setpoint",
-            qos
+        self.status_sub = self.create_subscription(
+            VehicleStatus,
+            'fmu/out/vehicle_status',
+            self.status_callback,
+            qos_sub
         )
 
-        self.arm_pub = self.create_publisher(
-            VehicleCommand,
-            "/fmu/in/vehicle_command",
-            qos
+        self.status_sub = self.create_subscription(
+            VehicleStatus,
+            'fmu/out/vehicle_status_v1',
+            self.status_callback,
+            qos_sub
         )
 
-        self.arm_timer = self.create_timer(1.0, self.arm)
+        self.offboard_pub = self.create_publisher(OffboardControlMode, 'fmu/in/offboard_control_mode', qos_pub)
+        self.trajectory_pub = self.create_publisher(TrajectorySetpoint, 'fmu/in/trajectory_setpoint', qos_pub)
+        self.command_pub = self.create_publisher(VehicleCommand, 'fmu/in/vehicle_command', qos_pub)
 
-        self.offboard_pub = self.create_publisher(
-            VehicleCommand,
-            "/fmu/in/vehicle_command",
-            qos 
-        )
+        timer_period = 0.1
 
-        self.offboard_timer = self.create_timer(1.0, self.offboard)
+        self.main_timer = self.create_timer(timer_period, self.main_callback) 
 
-        self.altitude_sub = self.create_subscription(
-            VehicleLocalPosition,
-            "/fmu/out/vehicle_local_position",
-            self.altitude,
-            qos
-        )
+        self.vehicle_status = VehicleStatus()
 
-        self.timer = self.create_timer(0.1, self.timer_callback)
+        self.dt = timer_period 
+        self.declare_parameter('radius', 10.0) # radius of orbiting circle
+        self.declare_parameter('omega', 5.0) # angular velocity magnitude
+        self.declare_parameter('altitude', 5) # altitude of orbiting circle
 
-    def timer_callback(self):
-        
-        msg = OffboardControlMode()
+        self.nav_state = VehicleStatus.NAVIGATION_STATE_MAX
+        self.arming_state = VehicleStatus.ARMING_STATE_DISARMED
 
-        msg.position = True
-        msg.velocity = False
-        msg.acceleration = False
-        msg.attitude = False
-        msg.body_rate = False
+        self.theta = 0.0 # angle going around the orbiting cirlce
+        self.radius = self.get_parameter('radius').value
+        self.omega = self.get_parameter('omega').value
+        self.altitude = self.get_parameter('altitude').value
 
-        msg.timestamp = (
-            self.get_clock()
-            .now()
-            .nanoseconds
-            // 1000
-        )
+        self.offboard_count = 0
 
-        self.publisher.publish(msg)
-
-        setpoint = TrajectorySetpoint()
+    def status_callback(self, msg):
+        self.get_logger().info("receiving status")
+        print("nav status: ", msg.nav_state)
+        print(" | offboard status: ", VehicleStatus.NAVIGATION_STATE_OFFBOARD)
+        self.nav_state = msg.nav_state
+        self.arming_state = self.arming_state
 
 
-        setpoint.position = [50.0, 50.0, -10.0]
+    def main_callback(self):
+        if self.offboard_count == 10:
+            self.offboard()
+            self.arm()
 
-        setpoint.timestamp = (
-            self.get_clock()
-            .now()
-            .nanoseconds
-            // 1000
-        )
+        offboard_msg = OffboardControlMode()
 
-        self.setpoint_pub.publish(setpoint)
+        offboard_msg.timestamp = int(self.get_clock().now().nanoseconds / 1000)
+        offboard_msg.position = True
+        offboard_msg.velocity = False
+        offboard_msg.acceleration = False
+        offboard_msg.attitude = False
+        offboard_msg.body_rate = False
 
-    def altitude(self, msg):
-        self.get_logger().info(f"Altitude: {(msg.z * -1):.2f}")
+        self.offboard_pub.publish(offboard_msg)
+
+        if self.offboard_count <= 11:
+            self.offboard_count += 1
+
+        if (self.nav_state == VehicleStatus.NAVIGATION_STATE_OFFBOARD and self.arming_state == VehicleStatus.ARMING_STATE_ARMED):
+            trajectory_msg = TrajectorySetpoint()
+            trajectory_msg.position[0] = self.radius * np.cos(self.theta)
+            trajectory_msg.position[1] = self.radius * np.sin(self.theta)
+            trajectory_msg.position[2] = -self.altitude
+            self.trajectory_pub.publish(trajectory_msg)
+
+            self.theta = self.theta + self.omega * self.dt
+            self.get_logger().info('Publishing setpoints')
 
     def arm(self):
-        msg = VehicleCommand()
-
-        msg.command = 400
-        msg.param1 = 1.0
-        msg.param2 = 0.0
-        msg.param3 = 0.0
-        msg.param4 = 0.0
-
-        msg.target_system = 1
-        msg.target_component = 1
-        msg.source_system = 1
-        msg.source_component = 1
-        msg.from_external = True
-
-        self.arm_pub.publish(msg)
+        self.command_publisher(VehicleCommand.VEHICLE_CMD_COMPONENT_ARM_DISARM, 1.0) # calls the command_publisher saying "arm"
+        self.get_logger().info('Arming vehicle...')
 
     def offboard(self):
-        msg = VehicleCommand()
-        
-        msg.command = 176
-        msg.param1 = 1.0
-        msg.param2 = 6.0
-        msg.param3 = 0.0
-        msg.param4 = 0.0
+        self.command_publisher(VehicleCommand.VEHICLE_CMD_DO_SET_MODE, 1.0, 6.0) # calls the command_publisher saying "enter offboard"
+        self.get_logger().info('Switching to offboard')
 
+    def command_publisher(self, command, param1=0.0, param2=0.0):
+        msg = VehicleCommand()
+        msg.param1 = param1
+        msg.param2 = param2
+        msg.command = command
         msg.target_system = 1
         msg.target_component = 1
         msg.source_system = 1
         msg.source_component = 1
         msg.from_external = True
-
-        self.offboard_pub.publish(msg)
+        msg.timestamp = int(self.get_clock().now().nanoseconds / 1000)
+        self.command_pub.publish(msg)
 
 
 def main(args=None):

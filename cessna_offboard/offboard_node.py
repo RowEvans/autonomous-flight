@@ -3,7 +3,7 @@ import numpy as np
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSDurabilityPolicy, QoSHistoryPolicy
 
-from px4_msgs.msg import OffboardControlMode, TrajectorySetpoint, VehicleCommand, VehicleOdometry
+from px4_msgs.msg import OffboardControlMode, TrajectorySetpoint, VehicleCommand, VehicleStatus
 
 
 class OffboardNode(Node):
@@ -30,8 +30,8 @@ class OffboardNode(Node):
 
         # subscribes to status to get real time updates of position, etc.
         self.status_sub = self.create_subscription(
-            VehicleOdometry,
-            'fmu/out/vehicle_odometry',
+            VehicleStatus,
+            'fmu/out/vehicle_status_v1',
             self.status_callback,
             qos_sub
         )
@@ -46,44 +46,28 @@ class OffboardNode(Node):
         #main timer
         self.main_timer = self.create_timer(timer_period, self.main_callback) 
 
-        #gets initial status
-        #self.vehicle_status = VehicleStatus()
-
-        self.dt = timer_period 
-        self.declare_parameter('radius', 10.0) # radius of orbiting circle
-        self.declare_parameter('omega', 5.0) # angular velocity magnitude
-
-        self.x = 0.0 # x position
-        self.y = 0.0 # y position
-        self.z_increment = 1.0
-        self.current_z = 0.0 # z position
-        self.new_z = 0.0
-        self.target_z = 10.0 # target z position
-
+        self.dt = timer_period # delta theta
+        self.declare_parameter('altitude', 50.0) # altitude of orbit (usually 50m)
+        self.declare_parameter('radius', 80.0) # radius of orbiting circle
+        self.declare_parameter('omega', 0.1875) # angular velocity magnitude
 
         #parameters to update live
-        self.theta = 0.0 # angle going around the orbiting cirlce
+        self.theta = 0.0 # angle in radians going around the orbiting circle
         self.radius = self.get_parameter('radius').value
         self.omega = self.get_parameter('omega').value
+        self.altitude = self.get_parameter('altitude').value
+
+        self.nav_state = VehicleStatus.NAVIGATION_STATE_MAX
+        self.arming_state = VehicleStatus.ARMING_STATE_DISARMED
 
         self.offboard_count = 0
 
     #status callback every time a status gets published
     def status_callback(self, msg):
-        #get new position
-        self.x = msg.position[0]
-        self.y = msg.position[1]
-        self.current_z = msg.position[2]
-
-        #calculate new z value
-        if self.current_z >= self.target_z:
-            self.new_z = self.current_z + self.z_increment
-        else:
-            self.new_z = self.current_z - self.z_increment
-
-        #publish what the altitude is
-        self.get_logger().info(f"altitude:{(self.current_z * -1):.2f}")
-
+        print("nav status: ", msg.nav_state)
+        print(" -offboard status: " , VehicleStatus.NAVIGATION_STATE_OFFBOARD)
+        self.nav_state = msg.nav_state
+        self.arming_state = msg.arming_state
 
     #main callback function
     def main_callback(self):
@@ -105,11 +89,12 @@ class OffboardNode(Node):
         if self.offboard_count <= 11:
             self.offboard_count += 1
 
-        if self.offboard_count == 10:
+        if self.nav_state == VehicleStatus.NAVIGATION_STATE_OFFBOARD and self.arming_state == VehicleStatus.ARMING_STATE_ARMED:
             trajectory_msg = TrajectorySetpoint()
             trajectory_msg.position[0] = self.radius * np.cos(self.theta)
             trajectory_msg.position[1] = self.radius * np.sin(self.theta)
-            trajectory_msg.position[2] = -self.new_z
+            trajectory_msg.position[2] = -self.altitude
+            trajectory_msg.yaw = self.theta + np.pi/2  # tangent to the circle, direction of travel
             self.trajectory_pub.publish(trajectory_msg)
 
             self.theta = self.theta + self.omega * self.dt

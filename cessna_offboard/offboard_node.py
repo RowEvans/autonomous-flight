@@ -3,7 +3,7 @@ import numpy as np
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSDurabilityPolicy, QoSHistoryPolicy
 
-from px4_msgs.msg import OffboardControlMode, TrajectorySetpoint, VehicleCommand, VehicleStatus
+from px4_msgs.msg import OffboardControlMode, TrajectorySetpoint, VehicleCommand, VehicleStatus, VehicleLocalPosition
 
 
 class OffboardNode(Node):
@@ -36,6 +36,16 @@ class OffboardNode(Node):
             qos_sub
         )
 
+        self.position_sub = self.create_subscription(
+            VehicleLocalPosition,
+            "fmu/out/vehicle_local_position_v1",
+            self.position_callback,
+            qos_sub
+        )
+
+        self.max_heading = 0.0
+        self.min_heading = 0.0
+
         # creates the three publishers
         self.offboard_pub = self.create_publisher(OffboardControlMode, 'fmu/in/offboard_control_mode', qos_pub)
         self.trajectory_pub = self.create_publisher(TrajectorySetpoint, 'fmu/in/trajectory_setpoint', qos_pub)
@@ -48,7 +58,7 @@ class OffboardNode(Node):
 
         self.dt = timer_period # delta theta
         self.declare_parameter('altitude', 50.0) # altitude of orbit (usually 50m)
-        self.declare_parameter('radius', 80.0) # radius of orbiting circle
+        self.declare_parameter('radius', 100.0) # radius of orbiting circle
         self.declare_parameter('omega', 0.1875) # angular velocity magnitude
 
         #parameters to update live
@@ -68,6 +78,14 @@ class OffboardNode(Node):
         print(" -offboard status: " , VehicleStatus.NAVIGATION_STATE_OFFBOARD)
         self.nav_state = msg.nav_state
         self.arming_state = msg.arming_state
+
+    def position_callback(self, msg):
+        print("true heading: ", msg.heading)
+        print(f"x: {msg.x} | y: {msg.y} | z: {-msg.z}")
+        if msg.heading < self.min_heading:
+            self.min_heading = msg.heading
+        elif msg.heading > self.max_heading:
+            self.max_heading = msg.heading
 
     #main callback function
     def main_callback(self):
@@ -94,11 +112,10 @@ class OffboardNode(Node):
             trajectory_msg.position[0] = self.radius * np.cos(self.theta)
             trajectory_msg.position[1] = self.radius * np.sin(self.theta)
             trajectory_msg.position[2] = -self.altitude
-            trajectory_msg.yaw = self.theta + np.pi/2  # tangent to the circle, direction of travel
+            trajectory_msg.yaw = self.theta + np.pi/2
+            print('my heading: ', self.theta + np.pi/2)
             self.trajectory_pub.publish(trajectory_msg)
-
             self.theta = self.theta + self.omega * self.dt
-            self.get_logger().info('Publishing setpoints')
 
     def arm(self):
         self.command_publisher(VehicleCommand.VEHICLE_CMD_COMPONENT_ARM_DISARM, 1.0) # calls the command_publisher saying "arm"

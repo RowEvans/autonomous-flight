@@ -2,22 +2,24 @@ import rclpy
 import numpy as np
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSDurabilityPolicy, QoSHistoryPolicy
-from px4_msgs.msg import VehicleStatus, VehicleCommand, OffboardControlMode, TrajectorySetpoint, VehicleLocalPosition
+from px4_msgs.msg import VehicleStatus, VehicleCommand, OffboardControlMode, TrajectorySetpoint
 
 class OffboardNode(Node):
     def __init__(self):
-        super.__init__("multicopter offboard")
+        super().__init__("multicopter_offboard")
 
         qos_out = QoSProfile(
             reliability = QoSReliabilityPolicy.BEST_EFFORT, # ensures being sent
             durability = QoSDurabilityPolicy.TRANSIENT_LOCAL, # persists policies for 'late' subscriptions
-            history = QoSHistoryPolicy.KEEP_LAST
+            history = QoSHistoryPolicy.KEEP_LAST,
+            depth = 10
         )
 
         qos_in = QoSProfile(
             reliability = QoSReliabilityPolicy.BEST_EFFORT,
             durability = QoSDurabilityPolicy.VOLATILE,
-            history = QoSHistoryPolicy.KEEP_LAST
+            history = QoSHistoryPolicy.KEEP_LAST,
+            depth = 10
         )
 
         self.status_sub = self.create_subscription(
@@ -27,7 +29,7 @@ class OffboardNode(Node):
             qos_in
         )
 
-        self.nav_state = VehicleStatus.NAVIGATION_STATE_MAX # autopilot flying basically
+        self.nav_state = VehicleStatus.NAVIGATION_STATE_MAX # not offboard
         self.arming_state = VehicleStatus.ARMING_STATE_DISARMED # not armed for external cmd flight
 
         self.cmd_pub = self.create_publisher(VehicleCommand, 'fmu/in/vehicle_command', qos_out) # command publisher
@@ -52,11 +54,13 @@ class OffboardNode(Node):
 
 
     def status_callback(self, msg):
+        print('nav: ', msg.nav_state)
+        print('offboard: ', msg.arming_state)
         self.nav_state = msg.nav_state
         self.arming_state = msg.arming_state
 
 
-    def main_callback(self, msg):
+    def main_callback(self):
         if self.ob_count == 10:
             self.arm()
             self.offboard()
@@ -70,10 +74,12 @@ class OffboardNode(Node):
         ob_msg.attitude = False
         ob_msg.body_rate = False
 
+        self.ob_pub.publish(ob_msg)
+
         if self.ob_count <= 11:
             self.ob_count += 1
 
-        if (self.nav_state == VehicleStatus.NAVIGATION_STATE_OFFBOARD and self.arming_state == VehicleStatus.ARMING_STATED_ARMED):
+        if (self.nav_state == VehicleStatus.NAVIGATION_STATE_OFFBOARD and self.arming_state == VehicleStatus.ARMING_STATE_ARMED):
             pos_msg = TrajectorySetpoint()
 
             pos_msg.timestamp = int(self.get_clock().now().nanoseconds / 1000)
@@ -90,7 +96,7 @@ class OffboardNode(Node):
         self.get_logger().info("Arming vehicle...")
 
     def offboard(self):
-        self.cmd_publisher(VehicleCommand.VEHICLE_DO_SET_MODE, 1.0, 6.0)
+        self.cmd_publisher(VehicleCommand.VEHICLE_CMD_DO_SET_MODE, 1.0, 6.0)
         self.get_logger().info("Entering offboard...")
 
     def cmd_publisher(self, cmd, param1=0.0, param2=0.0):

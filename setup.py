@@ -25,6 +25,7 @@ setup(
     entry_points={
         'console_scripts': [
             'offboard = cessna_offboard.offboard_node:main',
+            'quadcopter = cessna_offboard.multicopter_offboard:main'
         ],
     },
 )

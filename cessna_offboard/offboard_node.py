@@ -17,15 +17,15 @@ class OffboardNode(Node):
             reliability = QoSReliabilityPolicy.BEST_EFFORT, # ensures publishers are being sent
             durability = QoSDurabilityPolicy.TRANSIENT_LOCAL, # persists samples for 'late' subscriptions
             history=QoSHistoryPolicy.KEEP_LAST, # only store up to n samples, n = depth
-            depth = 0 # queue size -> only if KEEP_LAST
+            depth = 10 # queue size -> only if KEEP_LAST
         )
 
         # subscriber qos profile
         qos_sub = QoSProfile(
-            reliability = QoSReliabilityPolicy.BEST_EFFORT,
+        reliability = QoSReliabilityPolicy.BEST_EFFORT,
             durability = QoSDurabilityPolicy.VOLATILE, # makes no attempt to persist
             history=QoSHistoryPolicy.KEEP_LAST,
-            depth = 1
+            depth = 10
         )
 
         # subscribes to status to get real time updates of position, etc.

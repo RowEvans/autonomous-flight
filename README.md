@@ -2,11 +2,11 @@
 
 ## Background
 
-This project is built on top of a simulated autonomous fixed-wing aircraft mission, originally proposed as an undergraduate research project by a PhD researcher at Georgia Tech. The framing and phased structure of the mission below come from that proposal; everything in the "My Project" section past that point is my own implementation and progress.
+This project is built on top of a simulated autonomous fixed-wing aircraft mission, originally proposed as an undergraduate research project by a PhD researcher at Georgia Tech. This project's focus is to build a drone to provide detailed inspection of points of interest. The framing and phased structure of the mission below come from that proposal; everything in the "My Project" section past that point is my own implementation and progress.
 
 To understand what this project actually does, it helps to know the two main pieces of software involved:
 
-**PX4** is open-source flight controller firmware. It is essentially the "brain" that flies the aircraft at a low level. It keeps the aircraft stable, manages the throttle, reads sensor data, and enforces safety limits. In this project, PX4 runs in simulation (via a physics engine called Gazebo) rather than on real hardware, so there's no real airplane, pilot's license, or outdoor space required. PX4 still behaves exactly as it would on a real aircraft.
+**PX4** is open-source flight controller firmware. It is essentially the "brain" that flies the aircraft at a low level. It keeps the quadcopter stable, manages the throttle, reads sensor data, and enforces safety limits. In this project, PX4 runs in simulation (via a physics engine called Gazebo) rather than on real hardware, so there's no real drone, seaplane, or outdoor space required. PX4 still behaves exactly as it would on a real quadcopter.
 
 **ROS 2 (Robot Operating System 2)** is a framework for writing robotics software, used widely in both academic research and industry. It lets separate programs talk to each other by publishing and subscribing to named data streams called "topics." In this project, my code is a ROS 2 node, a self-contained program that publishes flight commands (like "climb to this altitude" or "fly to this position") and subscribes to telemetry data coming back from PX4 (like current position and flight status).
 
@@ -26,18 +26,17 @@ The full mission this project is built toward has five stages:
 4. **GPS circle mission** — orbit a user-specified GPS coordinate at a configurable radius.
 5. **Return and land** — fly back to the takeoff point and land automatically within a close tolerance.
 
-**Where I am right now:** I'm currently working on stage 2: getting the aircraft to reliably arm, enter offboard mode, and hold a stable orbit. This is the current focus of active development.
+**Where I am right now:** I'm currently working on stage 3: getting the drone capable of automatic takeoff to a predetermined altitude, and reporting once it reaches that altitude.
 
 ## My Project
 
-The core of what I've built so far is a single ROS 2 node (`offboard_node.py`) that controls a simulated Cessna in PX4.
+The core of what I've built so far is a single ROS 2 node (`multicopter_offboard.py`) that controls a simulated Cessna in PX4.
 
 Right now, the node:
 
-- Reads the aircraft's live position and altitude from PX4 as the simulation runs.
 - After a short startup period, sends the commands needed to switch the aircraft into offboard mode and arm it.
 - Sends continuous position setpoints — this is required by PX4's safety design, which expects a steady stream of commands at least a few times per second, or it assumes something has gone wrong and takes back control.
-- Commands the aircraft to climb toward a target altitude and then hold a circular orbit at that altitude, since a fixed-wing aircraft can't hover in place the way a drone can — it has to keep flying forward to stay in the air.
+- Commands the aircraft to climb toward a target altitude (50m) and then hold a circular orbit of radius 15m at that altitude, to "track marine life" except it's just a simulation
 
 The orbit's radius and turn rate are exposed as adjustable parameters, so I can tune the flight pattern without changing code.
 
@@ -47,7 +46,7 @@ This runs inside a ROS 2 workspace, alongside the PX4 message definitions packag
 
 ## Status
 
-This project is in its early stages and is being actively developed. The current priority is getting stable, reliable orbit behavior working before moving on to automated takeoff logic, GPS-based waypoint generation, and the return-and-land sequence.
+This project is in its early stages and is being actively developed. The current priority is getting automated takeoff logic before moving on GPS-based waypoint generation and the retuern-and-land sequence.
 
 ## Personal Reflection
 

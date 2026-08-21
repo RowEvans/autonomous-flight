@@ -36,16 +36,16 @@ class OffboardNode(Node):
         self.pos_pub = self.create_publisher(TrajectorySetpoint, 'fmu/in/trajectory_setpoint', qos_out) # setpoint publisher
         self.ob_pub = self.create_publisher(OffboardControlMode, 'fmu/in/offboard_control_mode', qos_out) # offboard publisher
 
-        timer_period = 0.1 # seconds
+        timer_period = 0.02 # seconds
         self.timer = self.create_timer(timer_period, self.main_callback)
 
         self.dt = timer_period # delta theta
 
         self.declare_parameter('radius', 15.0) # radius of 15.0m
         self.declare_parameter('altitude', 50.0) # altitude of 50.0m
-        self.declare_parameter('omega', 5.0) # angular velocity of leading tangential point
+        self.declare_parameter('omega', 0.5) # angular velocity of leading tangential point
 
-        self.theta = 0
+        self.theta = 0 # angle in a circle
         self.radius = self.get_parameter('radius').value
         self.altitude = self.get_parameter('altitude').value
         self.omega = self.get_parameter('omega').value
@@ -82,11 +82,12 @@ class OffboardNode(Node):
         if (self.nav_state == VehicleStatus.NAVIGATION_STATE_OFFBOARD and self.arming_state == VehicleStatus.ARMING_STATE_ARMED):
             pos_msg = TrajectorySetpoint()
 
-            pos_msg.timestamp = int(self.get_clock().now().nanoseconds / 1000)
             pos_msg.position[0] = self.radius * np.cos(self.theta)
             pos_msg.position[1] = self.radius * np.sin(self.theta)
             pos_msg.position[2] = -self.altitude
             self.pos_pub.publish(pos_msg)
+
+            self.get_logger().info("Publishing setpoints...")
 
             self.theta = self.theta + self.omega * self.dt
 

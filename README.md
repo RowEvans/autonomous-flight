@@ -26,17 +26,17 @@ The full mission this project is built toward has five stages:
 4. **GPS circle mission** — orbit a user-specified GPS coordinate at a configurable radius.
 5. **Return and land** — fly back to the takeoff point and land automatically within a close tolerance.
 
-**Where I am right now:** I'm currently working on stage 3: getting the drone capable of automatic takeoff to a predetermined altitude, and reporting once it reaches that altitude.
+**Where I am right now:** I'm currently working on stage 4: adding input to determine the GPS position to orbit and a configurable radius
 
 ## My Project
 
-The core of what I've built so far is a single ROS 2 node (`multicopter_offboard.py`) that controls a simulated Cessna in PX4.
+The core of what I've built so far is a single ROS 2 node (`multicopter_offboard.py`) that controls a simulated quadcopter in PX4.
 
 Right now, the node:
 
-- After a short startup period, sends the commands needed to switch the aircraft into offboard mode and arm it.
-- Sends continuous position setpoints — this is required by PX4's safety design, which expects a steady stream of commands at least a few times per second, or it assumes something has gone wrong and takes back control.
-- Commands the aircraft to climb toward a target altitude (50m) and then hold a circular orbit of radius 15m at that altitude, to "track marine life" except it's just a simulation
+- After a short "PREFLIGHT" period, enters "ARMING" and sends the commands needed to switch the aircraft into offboard mode and arm it.
+- Then it enters the "CLIMBING" phase, where it climbs to the altitude and once within 3m of target altitude, switches into "LOITERING"
+- Loiters in a circle orbit around (0, 0), simulating marine life tracking.
 
 The orbit's radius and turn rate are exposed as adjustable parameters, so I can tune the flight pattern without changing code.
 
@@ -46,7 +46,7 @@ This runs inside a ROS 2 workspace, alongside the PX4 message definitions packag
 
 ## Status
 
-This project is in its early stages and is being actively developed. The current priority is getting automated takeoff logic before moving on GPS-based waypoint generation and the retuern-and-land sequence.
+This project is in its early stages and is being actively developed. The current priority is getting GPS-based waypoint generation before the return-and-land sequence.
 
 ## Personal Reflection
 

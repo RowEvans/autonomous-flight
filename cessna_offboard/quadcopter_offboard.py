@@ -52,7 +52,7 @@ class OffboardNode(Node):
 
         self.declare_parameter('radius', 15.0) # radius of 15.0m
         self.declare_parameter('altitude', 50.0) # altitude of 50.0m
-        self.declare_parameter('omega', 0.5) # angular velocity of leading tangential point
+        self.declare_parameter('omega', 0.25) # angular velocity of leading tangential point
 
         self.declare_parameter('mode', 0)
 

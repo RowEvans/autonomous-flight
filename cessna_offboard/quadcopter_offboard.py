@@ -8,7 +8,7 @@ from px4_msgs.msg import VehicleStatus, VehicleCommand, OffboardControlMode, Tra
 
 class OffboardNode(Node):
     def __init__(self):
-        super().__init__("multicopter_offboard")
+        super().__init__("quadcopter_offboard")
 
         qos_out = QoSProfile(
             reliability = QoSReliabilityPolicy.BEST_EFFORT, # ensures being sent
@@ -80,9 +80,7 @@ class OffboardNode(Node):
 
     def pos_callback(self, msg):
         self.z = -msg.z
-        if self.altitude - 5 < self.z:
-            self.mode == 3
-        print('altitude: ', -msg.z)
+        self.get_logger().info(f"altitude: {self.z}")
 
 
 
@@ -106,16 +104,19 @@ class OffboardNode(Node):
             self.ob_count = 11
             self.mode = 1
 
-        if self.mode == 1:
+        elif self.mode == 1:
             self.arm()
             self.enter_offboard()
             if (self.nav_state == VehicleStatus.NAVIGATION_STATE_OFFBOARD and self.arming_state == VehicleStatus.ARMING_STATE_ARMED):
                 self.mode = 2
 
-        if self.mode == 2:
+        elif self.mode == 2:
             self.climb()
+            if (self.altitude - 3) < self.z: # 45 is less than 50 then self.mode == 3 and loiter
+                self.mode = 3
 
-        if self.mode == 3:
+
+        elif self.mode == 3:
             self.loiter()
 
     def ob_msgs(self):

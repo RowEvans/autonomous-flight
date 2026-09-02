@@ -1,7 +1,5 @@
 import rclpy
 import numpy as np
-import time
-import threading
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSDurabilityPolicy, QoSHistoryPolicy
 from px4_msgs.msg import VehicleStatus, VehicleCommand, OffboardControlMode, TrajectorySetpoint, VehicleLocalPosition
@@ -48,26 +46,47 @@ class OffboardNode(Node):
         timer_period = 0.02 # seconds
         self.timer = self.create_timer(timer_period, self.main_callback)
 
+        # -- ORBITING --
         self.dt = timer_period # delta theta
-
         self.declare_parameter('radius', 15.0) # radius of 15.0m
-        self.declare_parameter('altitude', 50.0) # altitude of 50.0m
         self.declare_parameter('omega', 0.25) # angular velocity of leading tangential point
 
-        self.declare_parameter('mode', 0)
-
-        self.theta = 0 # angle in a circle
+        self.theta = 0 # angle in the orbiting circle
         self.radius = self.get_parameter('radius').value
-        self.altitude = self.get_parameter('altitude').value
         self.omega = self.get_parameter('omega').value
+
+
+        # -- CLIMBING --
+        self.declare_parameter('center_lat', 0.0) # latitude of center of orbit
+        self.declare_parameter('center_lon', 0.0) # longtitude of center of orbit
+        self.declare_parameter('altitude', 50.0) # altitude of 50.0m
+
+        # a bunch of variables defined in pos_callback
+        self.home_lat = None
+        self.home_lon = None
+        self.home_set = False
+        self.north = None
+        self.east = None
+        self.max_distance = None
+        self.angle = None
+        self.z = None
+        self.d_dist = None
+
+        # command-line GPS position arguments
+        self.lat = self.get_parameter('center_lat').value
+        self.lon = self.get_parameter('center_lon').value
+        self.altitude = self.get_parameter('altitude').value
+        self.dist =  0.0 # distance going to be given
+
+
+        # -- STATE MACHINE --
+        self.declare_parameter('mode', 0)
 
         self.mode = self.get_parameter('mode').value
         self.modes = {0: 'PRE_FLIGHT',
                       1: 'ARMING',
                       2: 'CLIMBING',
                       3: 'LOITERING'}
-
-        self.z = 0.0
 
         self.ob_count = 0
 
@@ -78,10 +97,34 @@ class OffboardNode(Node):
         self.nav_state = msg.nav_state
         self.arming_state = msg.arming_state
 
+    def calc_orbit_geometry(self):
+        # -- Converting GPS to NED --
+        dlat = self.lat - self.home_lat
+        dlon = self.lon - self.home_lon
+        dlat_rad = np.radians(dlat)
+        dlon_rad = np.radians(dlon)
+        R_EARTH = 6378137.0
+        self.north = dlat_rad * R_EARTH
+        self.east = dlon_rad * R_EARTH * np.cos(np.radians(self.home_lat))
+
+        # calculate the total distance between home and given point
+        self.max_distance = np.sqrt((self.north ** 2) + (self.east ** 2))
+        self.d_dist = self.max_distance / 17.0
+
+        # angle pointing directly to the point in the xy-plane
+        self.angle = np.arctan2(self.east, self.north)
+
+
     def pos_callback(self, msg):
         self.z = -msg.z
         self.get_logger().info(f"altitude: {self.z}")
 
+        # -- Getting Home longitude and latitude --
+        if not self.home_set and msg.xy_global:
+            self.home_lat = msg.ref_lat
+            self.home_lon = msg.ref_lon
+            self.home_set = True
+            self.calc_orbit_geometry()
 
 
     def main_callback(self):
@@ -134,17 +177,18 @@ class OffboardNode(Node):
     def climb(self):
         pos_msg = TrajectorySetpoint()
 
-        pos_msg.position[0] = 0.0
-        pos_msg.position[1] = 0.0
+        pos_msg.position[0] = self.dist * np.cos(self.angle)
+        pos_msg.position[1] = self.dist * np.sin(self.angle)
         pos_msg.position[2] = -self.altitude
-
         self.pos_pub.publish(pos_msg)
+
+        self.dist = self.dist + self.d_dist * self.dt
 
     def loiter(self):
         pos_msg = TrajectorySetpoint()
 
-        pos_msg.position[0] = self.radius * np.cos(self.theta)
-        pos_msg.position[1] = self.radius * np.sin(self.theta)
+        pos_msg.position[0] = self.north + self.radius * np.cos(self.theta)
+        pos_msg.position[1] = self.east + self.radius * np.sin(self.theta)
         pos_msg.position[2] = -self.altitude
         self.pos_pub.publish(pos_msg)
 

@@ -1,4 +1,6 @@
 from setuptools import find_packages, setup
+import os
+from glob import glob
 
 package_name = 'cessna_offboard'
 
@@ -10,6 +12,7 @@ setup(
         ('share/ament_index/resource_index/packages',
             ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
+        (os.path.join('share', package_name, 'meshes'), glob('meshes/*')),
     ],
     install_requires=['setuptools'],
     zip_safe=True,
@@ -25,7 +28,8 @@ setup(
     entry_points={
         'console_scripts': [
             'offboard = cessna_offboard.offboard_node:main',
-            'quadcopter = cessna_offboard.quadcopter_offboard:main'
+            'quadcopter = cessna_offboard.quadcopter_offboard:main',
+            'scene_markers = cessna_offboard.scene_markers:main',
         ],
     },
 )

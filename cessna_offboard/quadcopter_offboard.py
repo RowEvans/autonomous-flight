@@ -59,6 +59,7 @@ class OffboardNode(Node):
         # -- CLIMBING --
         self.declare_parameter('center_lat', 0.0) # latitude of center of orbit
         self.declare_parameter('center_lon', 0.0) # longtitude of center of orbit
+        self.declare_parameter('climb_rate', 3.0) # rate of climb in mps
         self.declare_parameter('altitude', 50.0) # altitude of 50.0m
 
         # a bunch of variables defined in pos_callback
@@ -76,6 +77,8 @@ class OffboardNode(Node):
         self.lat = self.get_parameter('center_lat').value
         self.lon = self.get_parameter('center_lon').value
         self.altitude = self.get_parameter('altitude').value
+        self.climb_rate = self.get_parameter('climb_rate').value
+        self.cmd_alt = None
         self.dist =  0.0 # distance going to be given
 
 
@@ -86,14 +89,12 @@ class OffboardNode(Node):
         self.modes = {0: 'PRE_FLIGHT',
                       1: 'ARMING',
                       2: 'CLIMBING',
-                      3: 'LOITERING'}
+                      3: 'ORBITING'}
 
         self.ob_count = 0
 
 
     def status_callback(self, msg):
-        print('nav: ', msg.nav_state)
-        print('offboard: ', msg.arming_state)
         self.nav_state = msg.nav_state
         self.arming_state = msg.arming_state
 
@@ -134,9 +135,9 @@ class OffboardNode(Node):
         # PRE_FLIGHT: Posting messages, but waiting
         # ARMING: Arms and enters offboard mode
         # CLIMBING: Sending setpoints on its way up
-        # LOITERING: Back to orbiting logic
+        # ORBITING: Back to orbiting logic
         # need to always be sending offboard_msgs
-        self.get_logger().info("MODE: " + self.modes[self.mode])
+        #self.get_logger().info("MODE: " + self.modes[self.mode])
 
         self.ob_msgs() # sending constant ob_msgs
 
@@ -160,7 +161,7 @@ class OffboardNode(Node):
 
 
         elif self.mode == 3:
-            self.loiter()
+            self.orbit()
 
     def ob_msgs(self):
         ob_msg = OffboardControlMode()
@@ -175,16 +176,20 @@ class OffboardNode(Node):
         self.ob_pub.publish(ob_msg)
 
     def climb(self):
+        if self.cmd_alt is None:
+            self.cmd_alt = max(self.z, 0.0) # start from initial altitude
+
         pos_msg = TrajectorySetpoint()
 
         pos_msg.position[0] = self.dist * np.cos(self.angle)
         pos_msg.position[1] = self.dist * np.sin(self.angle)
-        pos_msg.position[2] = -self.altitude
+        pos_msg.position[2] = -self.cmd_alt
         self.pos_pub.publish(pos_msg)
 
         self.dist = self.dist + self.d_dist * self.dt
+        self.cmd_alt = min(self.cmd_alt + self.climb_rate * self.dt, self.altitude)
 
-    def loiter(self):
+    def orbit(self):
         pos_msg = TrajectorySetpoint()
 
         pos_msg.position[0] = self.north + self.radius * np.cos(self.theta)

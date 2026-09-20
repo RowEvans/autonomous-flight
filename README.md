@@ -4,7 +4,7 @@
 
 This project is built on top of a simulated autonomous fixed-wing aircraft mission, originally proposed as an undergraduate research project by a PhD researcher at Georgia Tech. This project's focus is to build a drone to provide detailed inspection of points of interest. The framing and phased structure of the mission below come from that proposal; everything in the "My Project" section past that point is my own implementation and progress.
 
-To understand what this project actually does, it helps to know the two main pieces of software involved:
+To understand what this project actually does, it helps to know the main pieces of software involved:
 
 **PX4** is open-source flight controller firmware. It is essentially the "brain" that flies the aircraft at a low level. It keeps the quadcopter stable, manages the throttle, reads sensor data, and enforces safety limits. In this project, PX4 runs in simulation (via a physics engine called Gazebo) rather than on real hardware, so there's no real drone, seaplane, or outdoor space required. PX4 still behaves exactly as it would on a real quadcopter.
 
@@ -26,19 +26,19 @@ The full mission this project is built toward has five stages:
 4. **GPS circle mission** — orbit a user-specified GPS coordinate at a configurable radius.
 5. **Return and land** — fly back to the takeoff point and land automatically within a close tolerance.
 
-**Where I am right now:** I'm currently working on stage 4: adding input to determine the GPS position to orbit and a configurable radius
+**Where I am right now:** I'm currently working on stage 5: adding automatic return and land
 
 ## My Project
 
-The core of what I've built so far is a single ROS 2 node (`multicopter_offboard.py`) that controls a simulated quadcopter in PX4.
+The core of what I've built so far is a single ROS 2 node (`quadcopter_offboard.py`) that controls a simulated quadcopter in PX4.
 
 Right now, the node:
 
 - After a short "PREFLIGHT" period, enters "ARMING" and sends the commands needed to switch the aircraft into offboard mode and arm it.
-- Then it enters the "CLIMBING" phase, where it climbs to the altitude and once within 3m of target altitude, switches into "LOITERING"
-- Loiters in a circle orbit around (0, 0), simulating marine life tracking.
+- Then it enters the "CLIMBING" phase, where it incrementally climbs to the altitude and once within 3m of target altitude, switches into "LOITERING"
+- Loiters in a circle orbit around a previously desired command-line arugment, simulating marine life tracking.
 
-The orbit's radius and turn rate are exposed as adjustable parameters, so I can tune the flight pattern without changing code.
+The orbit's radius, longitude and latitude are exposed as adjustable parameters, so I can tune the flight pattern without changing code.
 
 ### Setup
 
@@ -46,7 +46,7 @@ This runs inside a ROS 2 workspace, alongside the PX4 message definitions packag
 
 ## Status
 
-This project is in its early stages and is being actively developed. The current priority is getting GPS-based waypoint generation before the return-and-land sequence.
+This project is in its early stages and is being actively developed. The current priority is the return-and-land sequence.
 
 ## Personal Reflection
 
